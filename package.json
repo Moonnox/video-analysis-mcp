@@ -1,0 +1,26 @@
+{
+  "name": "mcp-server-video-analysis",
+  "version": "1.0.0",
+  "description": "MCP server for video analysis using Google's Gemini AI",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "video",
+    "analysis",
+    "gemini",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.2.1",
+    "form-data": "^4.0.0",
+    "node-fetch": "^2.7.0",
+    "uuid": "^9.0.1",
+    "express": "^4.18.2"
+  }
+}

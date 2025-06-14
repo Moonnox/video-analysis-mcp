@@ -1,0 +1,33 @@
+# Smithery configuration file for Video Analysis MCP Server
+# https://smithery.ai/docs/build/project-config/smithery.yaml
+
+startCommand:
+  type: http
+  configSchema:
+    type: object
+    required: 
+      - geminiApiKey
+    properties:
+      geminiApiKey:
+        type: string
+        title: "Gemini API Key"
+        description: "Your Google Gemini API key for video analysis"
+      port:
+        type: number
+        title: "Server Port"
+        description: "Port for the video analysis server"
+        default: 3000
+        minimum: 1000
+        maximum: 65535
+      maxFileSize:
+        type: string
+        title: "Max File Size"
+        description: "Maximum video file size (e.g., '100MB')"
+        default: "100MB"
+      supportedFormats:
+        type: array
+        title: "Supported Video Formats"
+        description: "List of supported video file formats"
+        default: ["mp4", "avi", "mov", "mkv", "webm"]
+        items:
+          type: string
