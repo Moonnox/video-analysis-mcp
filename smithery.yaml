@@ -1,34 +1,31 @@
 version: 1
-runtime: container
 startCommand:
   type: stdio
-build:
-  dockerfile: "Dockerfile"
-  dockerBuildPath: "."
-healthCheck:
-  timeout: 30
-  interval: 10
-  retries: 3
-  startPeriod: 60
-configSchema:
-  type: object
-  properties:
-    google_api_key:
-      type: string
-      description: "Your Google API key for Gemini AI"
-      default: ""
-    debug:
-      type: boolean
-      description: "Enable debug logging"
-      default: false
-    max_video_size_mb:
-      type: number
-      description: "Maximum video file size in MB"
-      default: 100
-      minimum: 1
-      maximum: 500
-  required: []
-exampleConfig:
-  google_api_key: ""
-  debug: false
-  max_video_size_mb: 100
+  configSchema:
+    type: object
+    required: []
+    properties:
+      google_api_key:
+        type: string
+        description: "Your Google API key for Gemini AI"
+        default: ""
+      debug:
+        type: boolean
+        description: "Enable debug logging"
+        default: false
+      max_video_size_mb:
+        type: number
+        description: "Maximum video file size in MB"
+        default: 100
+        minimum: 1
+        maximum: 500
+  commandFunction: |-
+    (config) => ({ 
+      command: 'node', 
+      args: ['mcp-server.js'], 
+      env: { 
+        GOOGLE_API_KEY: config.google_api_key || '',
+        DEBUG: config.debug ? 'true' : 'false',
+        MAX_VIDEO_SIZE_MB: config.max_video_size_mb?.toString() || '100'
+      } 
+    })
