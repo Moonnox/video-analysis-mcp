@@ -19,11 +19,11 @@ RUN adduser -S nodejs -u 1001
 RUN chown -R nodejs:nodejs /app
 USER nodejs
 
-# Expose port
-EXPOSE 3000
-
 # Make the server executable
 RUN chmod +x mcp-server.js
 
-# Start the MCP server
+# Set environment
+ENV NODE_ENV=production
+
+# Start the MCP server with stdio transport
 CMD ["node", "mcp-server.js"]
