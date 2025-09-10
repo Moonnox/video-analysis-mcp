@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
-const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
+const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { 
   CallToolRequestSchema, 
   ListToolsRequestSchema, 
@@ -17,13 +17,9 @@ const { promisify } = require('util');
 const { pipeline } = require('stream');
 const streamPipeline = promisify(pipeline);
 const os = require('os');
-const express = require('express');
 
 // Configuration management
 let currentConfig = {};
-
-// Store active transports by session ID
-const transports = new Map();
 
 function setConfig(config) {
   currentConfig = config;
@@ -83,29 +79,56 @@ async function fileToGenerativePart(filePath, mimeType) {
   };
 }
 
+// Supported video formats
+const SUPPORTED_FORMATS = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm', 
+  '.mov': 'video/quicktime',
+  '.avi': 'video/x-msvideo',
+  '.mkv': 'video/x-matroska'
+};
+
+// Maximum file size (100MB)
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
+// Validate video file
+function validateVideoFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new McpError(ErrorCode.InvalidRequest, `File not found: ${filePath}`);
+  }
+  
+  const ext = path.extname(filePath).toLowerCase();
+  if (!SUPPORTED_FORMATS[ext]) {
+    const supportedExts = Object.keys(SUPPORTED_FORMATS).join(', ');
+    throw new McpError(ErrorCode.InvalidRequest, `Unsupported file format. Supported formats: ${supportedExts}`);
+  }
+  
+  const stats = fs.statSync(filePath);
+  if (stats.size > MAX_FILE_SIZE) {
+    throw new McpError(ErrorCode.InvalidRequest, `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+  }
+  
+  return SUPPORTED_FORMATS[ext];
+}
+
+// Validate URL
+function validateUrl(url) {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    throw new McpError(ErrorCode.InvalidRequest, 'Invalid URL format');
+  }
+}
+
 // Main video analysis function
 async function analyzeVideo(videoPath, analysisPrompt) {
   requireGoogleApiKey();
   log(`Analyzing video: ${videoPath}`);
   
   try {
-    // Determine MIME type based on file extension
-    const ext = path.extname(videoPath).toLowerCase();
-    let mimeType;
-    
-    switch (ext) {
-      case '.mp4':
-        mimeType = 'video/mp4';
-        break;
-      case '.webm':
-        mimeType = 'video/webm';
-        break;
-      case '.mov':
-        mimeType = 'video/quicktime';
-        break;
-      default:
-        mimeType = 'video/mp4'; // Default to mp4
-    }
+    // Validate file and get MIME type
+    const mimeType = validateVideoFile(videoPath);
     
     // Convert video to generative part
     const videoPart = await fileToGenerativePart(videoPath, mimeType);
@@ -160,23 +183,11 @@ async function analyzeVideo(videoPath, analysisPrompt) {
 }
 
 /**
- * Main function to run the Video Analysis MCP server
+ * Main function to run the Video Analysis MCP server (stdio only)
  */
 async function runServer() {
   try {
-    const app = express();
-    app.use(express.json());
-
-    // Parse configuration from query parameters
-    app.use((req, res, next) => {
-      const config = {
-        googleApiKey: req.query.google_api_key || process.env.GOOGLE_API_KEY
-      };
-      setConfig(config);
-      next();
-    });
-
-    // Initialize the server
+    // Initialize the MCP server
     const server = new Server(
       {
         name: "video-analysis-server",
@@ -189,10 +200,16 @@ async function runServer() {
       }
     );
 
+    // Load configuration from environment variables
+    const config = {
+      googleApiKey: process.env.GOOGLE_API_KEY
+    };
+    setConfig(config);
+
     // Set error handler
     server.onerror = (error) => log(`[MCP Error] ${error}`);
 
-    // Handle tool listing - CRITICAL: No authentication required for tool discovery
+    // Handle tool listing
     server.setRequestHandler(
       ListToolsRequestSchema,
       async () => {
@@ -248,7 +265,7 @@ async function runServer() {
       }
     );
 
-    // Handle tool calls - Authentication happens here during execution
+    // Handle tool calls
     server.setRequestHandler(
       CallToolRequestSchema,
       async (request) => {
@@ -259,64 +276,47 @@ async function runServer() {
 
         try {
           switch (toolName) {
-            case "analyze_video_file":
+            case "analyze_video_file": {
               const { file_path, analysis_prompt } = toolParams;
-              
-              if (!file_path) {
-                throw new McpError(ErrorCode.InvalidRequest, 'File path is required');
+              if (!file_path || typeof file_path !== 'string') {
+                throw new McpError(ErrorCode.InvalidRequest, 'File path is required and must be a string');
               }
-              
-              if (!fs.existsSync(file_path)) {
-                throw new McpError(ErrorCode.InvalidRequest, `File not found: ${file_path}`);
+              if (analysis_prompt && typeof analysis_prompt !== 'string') {
+                throw new McpError(ErrorCode.InvalidRequest, 'Analysis prompt must be a string');
               }
-              
               const fileResult = await analyzeVideo(file_path, analysis_prompt);
-              return {
-                content: [{ 
-                  type: "text", 
-                  text: JSON.stringify(fileResult, null, 2) 
-                }]
-              };
-
-            case "analyze_video_url":
+              return { content: [{ type: "text", text: JSON.stringify(fileResult, null, 2) }] };
+            }
+            case "analyze_video_url": {
               const { video_url, analysis_prompt: urlPrompt } = toolParams;
-              
-              if (!video_url) {
-                throw new McpError(ErrorCode.InvalidRequest, 'Video URL is required');
+              if (!video_url || typeof video_url !== 'string') {
+                throw new McpError(ErrorCode.InvalidRequest, 'Video URL is required and must be a string');
               }
-              
-              // Generate a unique filename for the downloaded video
+              if (urlPrompt && typeof urlPrompt !== 'string') {
+                throw new McpError(ErrorCode.InvalidRequest, 'Analysis prompt must be a string');
+              }
+              validateUrl(video_url);
               const tempFilePath = path.join(TEMP_DIR, `${uuidv4()}.mp4`);
-              
               try {
-                // Download the video
                 await downloadFile(video_url, tempFilePath);
-                
-                // Analyze the video
                 const urlResult = await analyzeVideo(tempFilePath, urlPrompt);
-                
-                // Clean up the temporary file
-                fs.unlinkSync(tempFilePath);
-                log(`Deleted temporary file: ${tempFilePath}`);
-                
-                return {
-                  content: [{ 
-                    type: "text", 
-                    text: JSON.stringify(urlResult, null, 2) 
-                  }]
-                };
-              } catch (error) {
-                // Clean up on error
                 if (fs.existsSync(tempFilePath)) {
                   fs.unlinkSync(tempFilePath);
+                  log(`Deleted temporary file: ${tempFilePath}`);
+                }
+                return { content: [{ type: "text", text: JSON.stringify(urlResult, null, 2) }] };
+              } catch (error) {
+                if (fs.existsSync(tempFilePath)) {
+                  fs.unlinkSync(tempFilePath);
+                  log(`Cleanup: Deleted temporary file: ${tempFilePath}`);
                 }
                 throw error;
               }
-
-            case "get_server_status":
+            }
+            case "get_server_status": {
               return {
-                content: [{ 
-                  type: "text", 
+                content: [{
+                  type: "text",
                   text: JSON.stringify({
                     status: "operational",
                     api_key_configured: !!currentConfig.googleApiKey,
@@ -325,91 +325,27 @@ async function runServer() {
                   }, null, 2)
                 }]
               };
-
+            }
             default:
               throw new McpError(ErrorCode.MethodNotFound, `Tool ${toolName} not found`);
           }
         } catch (error) {
           log(`Error in tool execution: ${error.message}`);
-          if (error instanceof McpError) {
-            throw error;
-          }
+          if (error instanceof McpError) throw error;
           throw new McpError(ErrorCode.InternalError, error.message);
         }
       }
     );
 
-    // SSE endpoint for establishing connection
-    app.get('/sse', async (req, res) => {
-      try {
-        // Create SSE transport with the messages endpoint
-        const transport = new SSEServerTransport('/messages', res);
-        
-        // Store transport by session ID
-        transports.set(transport.sessionId, transport);
-        
-        // Set up transport cleanup on close
-        transport.onclose = () => {
-          transports.delete(transport.sessionId);
-          log(`SSE connection closed for session ${transport.sessionId}`);
-        };
-        
-        // Connect server to transport
-        await server.connect(transport);
-        log(`SSE connection established for session ${transport.sessionId}`);
-      } catch (error) {
-        log(`SSE connection error: ${error instanceof Error ? error.message : String(error)}`);
-        res.status(500).json({ error: 'Failed to establish SSE connection' });
-      }
-    });
-
-    // Messages endpoint for handling client requests
-    app.post('/messages', async (req, res) => {
-      try {
-        // Extract session ID from query parameters
-        const sessionId = req.query.sessionId;
-        
-        if (!sessionId) {
-          res.status(400).json({ error: 'Missing sessionId parameter' });
-          return;
-        }
-        
-        // Get the transport for this session
-        const transport = transports.get(sessionId);
-        
-        if (!transport) {
-          res.status(404).json({ error: 'Session not found. Please establish SSE connection first.' });
-          return;
-        }
-        
-        // Handle the message through the transport
-        await transport.handlePostMessage(req, res);
-      } catch (error) {
-        log(`Message handling error: ${error instanceof Error ? error.message : String(error)}`);
-        res.status(500).json({ error: 'Internal server error' });
-      }
-    });
-    
-    // Health check endpoint
-    app.get('/health', (req, res) => {
-      res.json({ status: 'ok', activeSessions: transports.size });
-    });
-
-    const port = process.env.PORT || 3000;
-    app.listen(port, () => {
-      log(`Video Analysis MCP Server started on port ${port}`);
-      console.log(`Video Analysis MCP Server running on port ${port}`);
-      console.log(`SSE endpoint: http://localhost:${port}/sse`);
-      console.log(`Messages endpoint: http://localhost:${port}/messages`);
-    });
-    
+    // Connect via stdio transport (no HTTP server)
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
   } catch (error) {
     log(`Server failed to start: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 }
 
-// Run the server
 runServer().catch((error) => {
   log(`Server failed to start: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
