@@ -365,7 +365,123 @@ app.get('/api/status', authenticate, (req, res) => {
   });
 });
 
-// MCP-compatible endpoints
+// Standard MCP endpoint at /mcp - GET for discovery
+app.get('/mcp', (req, res) => {
+  res.json({
+    name: "video-analysis-mcp",
+    version: "1.0.0",
+    description: "MCP server for video analysis using Google's Gemini AI",
+    capabilities: {
+      tools: true
+    }
+  });
+});
+
+// Standard MCP endpoint at /mcp - POST for operations
+app.post('/mcp', authenticate, async (req, res) => {
+  const { method, params } = req.body;
+  
+  log(`MCP request: ${method}`);
+  
+  try {
+    switch (method) {
+      case 'tools/list':
+        res.json({
+          tools: [
+            {
+              name: "analyze_video_file",
+              description: "Analyze a video file using Google's Gemini AI",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  file_path: {
+                    type: "string",
+                    description: "Path to the video file (for uploaded files)"
+                  },
+                  analysis_prompt: {
+                    type: "string",
+                    description: "Optional custom prompt for analysis"
+                  }
+                },
+                required: ["file_path"]
+              }
+            },
+            {
+              name: "analyze_video_url",
+              description: "Download and analyze a video from URL",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  video_url: {
+                    type: "string",
+                    description: "URL of the video to analyze"
+                  },
+                  analysis_prompt: {
+                    type: "string",
+                    description: "Optional custom prompt for analysis"
+                  }
+                },
+                required: ["video_url"]
+              }
+            }
+          ]
+        });
+        break;
+        
+      case 'tools/call':
+        const { name: toolName, arguments: args } = params || {};
+        
+        switch (toolName) {
+          case 'analyze_video_file': {
+            const { file_path, analysis_prompt } = args || {};
+            if (!file_path) {
+              throw new Error('file_path is required');
+            }
+            const result = await analyzeVideo(file_path, analysis_prompt);
+            res.json({ content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
+            break;
+          }
+          
+          case 'analyze_video_url': {
+            const { video_url, analysis_prompt } = args || {};
+            if (!video_url) {
+              throw new Error('video_url is required');
+            }
+            
+            const tempFilePath = path.join(TEMP_DIR, `${uuidv4()}.mp4`);
+            try {
+              await downloadFile(video_url, tempFilePath);
+              const result = await analyzeVideo(tempFilePath, analysis_prompt);
+              
+              if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+              }
+              
+              res.json({ content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
+            } catch (error) {
+              if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+              }
+              throw error;
+            }
+            break;
+          }
+          
+          default:
+            res.status(404).json({ error: `Tool ${toolName} not found` });
+        }
+        break;
+        
+      default:
+        res.status(404).json({ error: `Method ${method} not found` });
+    }
+  } catch (error) {
+    log(`Error in MCP request: ${error.message}`, 'ERROR');
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// MCP-compatible endpoints (keeping for backward compatibility)
 app.post('/api/mcp/tools', authenticate, async (req, res) => {
   res.json({
     tools: [
