@@ -385,6 +385,19 @@ app.post('/mcp', authenticate, async (req, res) => {
   
   try {
     switch (method) {
+      case 'initialize':
+        res.json({
+          protocolVersion: "1.0.0",
+          capabilities: {
+            tools: {}
+          },
+          serverInfo: {
+            name: "video-analysis-mcp",
+            version: "1.0.0"
+          }
+        });
+        break;
+        
       case 'tools/list':
         res.json({
           tools: [

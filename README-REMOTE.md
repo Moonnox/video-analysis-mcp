@@ -101,6 +101,30 @@ Authorization: Bearer your-jwt-token
 
 ### REST API Endpoints
 
+#### Standard MCP Endpoint
+```bash
+# Discovery (no auth required)
+GET /mcp
+
+# MCP Operations (auth required if enabled)
+POST /mcp
+Content-Type: application/json
+
+# For listing tools:
+{"method": "tools/list"}
+
+# For calling tools:
+{
+  "method": "tools/call",
+  "params": {
+    "name": "analyze_video_url",
+    "arguments": {
+      "video_url": "https://example.com/video.mp4"
+    }
+  }
+}
+```
+
 #### Health Check
 ```bash
 GET /health
