@@ -379,15 +379,38 @@ app.get('/mcp', (req, res) => {
 
 // Standard MCP endpoint at /mcp - POST for operations
 app.post('/mcp', authenticate, async (req, res) => {
-  const { method, params } = req.body;
+  const { id, jsonrpc, method, params } = req.body;
   
-  log(`MCP request: ${method}`);
+  log(`MCP request: ${method} (id: ${id})`);
+  
+  // Helper function to send JSON-RPC response
+  const sendResponse = (result) => {
+    const response = {
+      jsonrpc: jsonrpc || "2.0",
+      id: id,
+      result: result
+    };
+    res.json(response);
+  };
+  
+  // Helper function to send JSON-RPC error
+  const sendError = (code, message) => {
+    const response = {
+      jsonrpc: jsonrpc || "2.0",
+      id: id,
+      error: {
+        code: code,
+        message: message
+      }
+    };
+    res.json(response);
+  };
   
   try {
     switch (method) {
       case 'initialize':
-        res.json({
-          protocolVersion: "1.0.0",
+        sendResponse({
+          protocolVersion: "2024-11-05",
           capabilities: {
             tools: {}
           },
@@ -399,7 +422,7 @@ app.post('/mcp', authenticate, async (req, res) => {
         break;
         
       case 'tools/list':
-        res.json({
+        sendResponse({
           tools: [
             {
               name: "analyze_video_file",
@@ -448,17 +471,21 @@ app.post('/mcp', authenticate, async (req, res) => {
           case 'analyze_video_file': {
             const { file_path, analysis_prompt } = args || {};
             if (!file_path) {
-              throw new Error('file_path is required');
+              sendError(-32602, 'file_path is required');
+              return;
             }
             const result = await analyzeVideo(file_path, analysis_prompt);
-            res.json({ content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
+            sendResponse({
+              content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+            });
             break;
           }
           
           case 'analyze_video_url': {
             const { video_url, analysis_prompt } = args || {};
             if (!video_url) {
-              throw new Error('video_url is required');
+              sendError(-32602, 'video_url is required');
+              return;
             }
             
             const tempFilePath = path.join(TEMP_DIR, `${uuidv4()}.mp4`);
@@ -470,7 +497,9 @@ app.post('/mcp', authenticate, async (req, res) => {
                 fs.unlinkSync(tempFilePath);
               }
               
-              res.json({ content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
+              sendResponse({
+                content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+              });
             } catch (error) {
               if (fs.existsSync(tempFilePath)) {
                 fs.unlinkSync(tempFilePath);
@@ -481,16 +510,16 @@ app.post('/mcp', authenticate, async (req, res) => {
           }
           
           default:
-            res.status(404).json({ error: `Tool ${toolName} not found` });
+            sendError(-32601, `Tool ${toolName} not found`);
         }
         break;
         
       default:
-        res.status(404).json({ error: `Method ${method} not found` });
+        sendError(-32601, `Method ${method} not found`);
     }
   } catch (error) {
     log(`Error in MCP request: ${error.message}`, 'ERROR');
-    res.status(500).json({ error: error.message });
+    sendError(-32603, error.message);
   }
 });
 
