@@ -91,7 +91,7 @@ async function analyzeVideo(videoPath, analysisPrompt) {
     const videoPart = await fileToGenerativePart(videoPath, mimeType);
     
     // Set up Gemini model
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     // Default prompts if none provided
     const defaultPrompts = [

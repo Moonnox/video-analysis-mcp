@@ -135,7 +135,7 @@ async function analyzeVideo(videoPath, analysisPrompt) {
     
     // Set up Gemini model
     const genAI = new GoogleGenerativeAI(currentConfig.googleApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     // Default prompts if none provided
     const defaultPrompts = [
