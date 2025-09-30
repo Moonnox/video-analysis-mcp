@@ -95,11 +95,11 @@ async function analyzeVideo(videoPath, analysisPrompt) {
     
     // Default prompts if none provided
     const defaultPrompts = [
-      "Describe the video in detail, including what's happening and the main subject matter.",
-      "What is the quality of the video recording and audio?",
-      "Are there any areas where the video could be improved?",
-      "Analyze the pacing and content organization of the video.",
-      "How well does this video meet typical user expectations for this type of content?"
+      "Analyze this video and provide a detailed timeline of key moments. For each important moment, scene change, or significant event, specify the approximate timestamp in seconds. Include: 1) A description of what happens at each moment, 2) The specific timestamp (in seconds) when it occurs, 3) Why this moment is significant or visually interesting. Format your response with clear timestamps like 'At 0s:', 'At 15s:', etc.",
+      "Identify 5-10 of the most visually interesting or important frames in this video that would make good screenshots. For each frame, provide: 1) The exact timestamp in seconds, 2) What makes this frame significant, 3) What visual elements are present. Format timestamps clearly as numbers in seconds.",
+      "Analyze the video's structure and identify timestamps for: 1) The opening/introduction, 2) Key transitions between topics or scenes, 3) Important moments showing the main subject matter, 4) The conclusion. Provide specific timestamps in seconds for each.",
+      "Review this video and suggest optimal timestamps (in seconds) where screenshots should be captured to create a comprehensive visual summary. Aim for 6-12 timestamps that together tell the story of the video.",
+      "Identify any moments in the video that contain: text overlays, important visual information, key demonstrations, or significant events. For each, provide the timestamp in seconds and describe what should be captured in a screenshot."
     ];
     
     const prompts = analysisPrompt ? [analysisPrompt] : defaultPrompts;
